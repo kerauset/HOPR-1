@@ -1,0 +1,1283 @@
+{ Task
+  Name = MainS
+  Pri = 27
+  Cycle = 1 s
+}
+{ Proc }
+{ APac }
+{ QPac SLib:\QSystem SLib:\QCom }
+{ VPac
+  Reg:\NmDefIO.dpe Reg:\NmInsIO.dpe Reg:\NmDrv.dpe  Reg:\NmDiv.dpe Reg:\NmRTM.dpe
+  Reg:\AlaPts  Reg:\AlaData Reg:\AlarmS  Reg:\InputOutput
+}
+{ Text }
+{ Const}
+{ Local
+   X OldTime
+   L NyTime 
+   X OldMin
+   L NyttMin 
+   X PLA_I = 255
+   X ELA_I = 255   
+   I T
+   I T1  = 1  ;s 1 sekund forsinkelse
+   I T5  = 5  ;s 5 sekund forsinkelse    
+   I T10 = 10 ;s 10 sekund forsinkelse
+   I T15 = 15 ;s 15 sekund forsinkelse
+   I T60 = 60 ;s 1 minutt forsinkelse
+   X Test
+    }
+{ Code  
+    
+    
+    
+;Variabelforklaring finn du enten i NMdiv eller i dokumenta som ligg under diverse lister i programmeringsmappa i Dropbox.     
+;Dersom du mÜ endre noko i variablane i EXOdesigner er det fint om du noterar ned kva for noko, so det er mogleg Ü ha oversikt. 
+;Listene treng du ikkje endre, for dei mÜ vi oppdatere nÜr alt av programmering er ferdig:)
+
+    
+;----------------------------------------------------
+;----------------aukar teljarar pr minutt------------
+;----------------------------------------------------   
+If (OldMin<>Min!)                    ;Teller minutter           ;Det som er under her og fõr P01-rÜvatn er telling.      
+  OldMin  = Min!                                                
+  NyttMin = 1                                                   
+Else                                                            
+  NyttMin = 0                                                   
+EndIf                                                           
+                                                                
+                                                                
+If (Oldtime<>Hour!)                  ;tel timar                 
+  OldTime = Hour!                                               
+  Nytime  = 1                                                   
+Else                                                            
+  Nytime  = 0                                                   
+EndIf                                                           
+                                                                
+If Nytime                                                       
+EndIf                                                           
+                                                                
+If Nyttmin                                                      
+                                                                
+EndIf                                                           
+                                                                
+;If EdgeL(P01_FT01_Puls)                                        
+;  IncX aaa                                                     
+;EndIf                                                          
+                                                                
+IncI T  ; (T=T+1) Teller som tel 1 for kvar syklus              
+                                                                
+;Test = Test + 1                                                
+;If (Test = 5)    ; TA VEKK TA VEKK                             
+;PID_I = 1;                                                     
+;EndIf                                                          
+;If (Test = 49)                                                 
+;Test = 0                                                       
+;EndIf                                                          
+                                                                
+                                                                
+;;-----------------------------------------                     
+;;-------- P01 - Innlõp rÜvatn ------------                     ;Det som er under her omhandlar slõyfa pÜ venstre sida. Knytt til P01
+;;-----------------------------------------                     
+OK(1) = Sym_OK(1) And (LT01>P01_LT01_L) ;And (LT02<LT02_H)      ;Sjekkar om tilstanden til nivÜ i inntaksbasseng og om pumpa er i auto. Om pumpa er i auto er avgjort av Sym_Ok(nr) som ser kva posisjon vendaren er i, i HMI.    
+                                                                
+;P01-Styring                                                    
+                                                                
+If (LT02>P01_LT02_H)                                            ;Gir startnekt til pumpa dersom den gÜr over hõgnivÜ LT02
+   P01_Start_I = 0                                              
+EndIf                                                           
+If (LT02<P01_LT02_setpunkt)                                     ;Gir starttillatelse til pumpa dersom den er under setpunkt LT02. Desse to delane er der for at pumpa ikkje skal gÜ av pÜ rundt berre ein grenseverdi.
+   P01_Start_I = 1                                              
+EndIf                                                           
+                                                                
+                                                                
+If OK(1) And P01_Start_I                                        ;Dersom pumpe OK og starttillatelse set ein PID driftsvalget til auto og sette pumpepÜdraget til PID-utgangen
+    PID_Drv(1)            = 2                                   
+    P01_Padrag_I          = PID_Out(1)                          
+Else                                                            
+    PID_Drv(1)            = 1                                   ;Viss ikkje OK og starttillatelse. Sette PID i manuell og pumpepÜdrag lik 0
+    P01_Padrag_I          = 0                                   
+EndIf                                                           
+                                                                
+PID_In(1)    = LT02                                             ;Lese inn nivÜ og setpunkt til PID
+PID_Set(1)   = P01_LT02_Setpunkt                                
+                                                                
+                                                                
+Switch DrValg(1)                                                
+;Pole 0                                         ;Dersom AV      ;Dette er driftsvalget til Pumpe 01. Fungerar som Switch/Case i java. Tilstanden blir valgt av kva som er valgt i HMI-vendaren.
+  P01_P01               = 0
+  P01_P01_Padrag        = 0
+  PID_Man(1)            = 0              
+                
+Pole 1                                          
+  P01_P01               = (Man(1)>0.1)          ;Dersom Manuell ;Hentar inn verdi som vi skriv i vendarvindu og brukar denne. 
+  P01_P01_Padrag        = Man(1)                   
+  PID_Man(1)            = Man(1)
+               
+Pole 2                                          ;Dersom Auto    ;Brukar verdi frÜ PID-utrekninga
+  P01_P01               = P01_Start_I
+  P01_P01_Padrag        = P01_Padrag_I             
+EndSwitch           
+
+
+
+
+;;;--------------------------------------------------------
+;;;--------- FILT - Filterslõyfe og RV01-slõyfe -----------
+;;;--------------------------------------------------------     
+OK(2) = Sym_OK(2) And (LT01>FILT_LT01_L)                        ;Prinsippe det same som for pumpe 01 over. Sjekkar om tilstandane til NivÜ er greit. Og om det er valgt auto.
+OK(4) = Sym_OK(4) And (LT03<FILT_LT03_H)
+OK(5) = Sym_OK(5) 
+OK(6) = Sym_OK(6) 
+OK(7) = Sym_OK(7)
+OK(8) = Sym_OK(8)
+
+FILT_Filter_OK_I  = OK(2) And OK(5) And OK(6) And OK(7) And OK(8) ;Berre ein variabel som er lettare Ü jobbe med en alle OK(nr)-ane
+FILT_RV01_OK_I    = OK(4)                                         ;Berre for at det skal vere likt
+ 
+;Valg frÜ HMI                                                   ;Input frÜ styringa i HMI. Dersom ein velge filter, bypass eller begge. Switchlõkke som sette interne variablar etter kva som blir valgt. 
+Switch FILT_Input
+    ;Pole 0
+        FILT_Filter_Start_I         = 1
+        FILT_RV01_Start_I           = 0
+    Pole 1 
+        FILT_Filter_Start_I         = 0                          
+        FILT_RV01_Start_I           = 1
+    Pole 2                          
+        FILT_Filter_Start_I         = 1
+        FILT_RV01_Start_I           = 1   
+EndSwitch
+
+ 
+    
+;Filtersekvens
+
+Switch FILT_Filter_sekv                                         ;Styring for filteret i auto. Denne switchlõkka vil gÜ sekvensielt so lenge alt er ok og alt er i AUto.  T som er i stort sett alle Polane, er berre ein tellarvariabel som blir nullstilt. 
+    ;Pole 0
+        If (T>T10) And  FILT_Filter_Start_I And FILT_Filter_OK_I 
+            FILT_Filter_sekv = 1
+            T = 0
+        EndIf
+        
+    Pole 1
+        FILT_SV01_I                 = 0
+        FILT_SV03_I                 = 0
+        FILT_SV04_I                 = 0
+        FILT_P02_Start_I            = 0
+        FILT_SV02_Padrag_I          = 100                       ;Opnar SV02, skrur pÜ UV_01 og ventar 5 sekund
+            If (T>T15)
+                FILT_Filter_sekv    = 2
+                T                   = 0
+            EndIf              
+    
+    Pole 2                                                      ;Opnar SV01 og ventar pÜ filtrering til LT03 (eventuelt 15 sekund)
+        FILT_SV01_I = 1                                  
+            If((LT03>(FILT_LT03_H)) Or (T>T15))
+                FILT_Filter_sekv    = 3
+                T                   = 0
+            EndIf
+    
+    Pole 3                                                      ;Stenger SV01 og ventar 5 sekund
+        FILT_SV01_I = 0
+            If(T>T15)
+                FILT_Filter_Sekv    = 4
+                T                   = 0
+            EndIf
+    
+    Pole 4                                                      ;Stenger SV02 og skrur av UV-filteret, ventar 15 sekund.
+        FILT_SV02_Padrag_I          = 0
+            If (T>T15)
+                FILT_Filter_sekv    = 5
+                T                   = 0
+            EndIf
+    
+    Pole 5
+        FILT_SV04_I = 1                                         ;Opnar SV04 og ventar 15 sekund
+            If(T>T15)
+                FILT_Filter_sekv    = 6
+                T                   = 0
+            EndIf
+    
+    Pole 6
+        If ((LT01>(FILT_LT01_L)) And FILT_SV04_I)               ;Dersom nivÜet er OK og SV04 er open starar han pumpa (pÜdrag 50%). Ellers gÜr han tilbake til Pole 1.
+            FILT_P02_Start_I        = 1
+            FILT_P02_Padrag_I       = 50
+            FILT_Filter_Sekv        = 7
+            T                       = 0
+        Else                        
+            FILT_Filter_Sekv        = 1
+            T                       = 0
+        EndIf                       
+
+    
+    Pole 7                                                      ;Ventar i 15 sekund, skrur deretter av pumpa. Dette mÜ sikkert stillast ned. 
+        If (T>T15)
+            FILT_P02_Start_I        = 1
+            FILT_P02_Padrag_I       = 0
+            FILT_Filter_Sekv        = 8
+            T                       = 0
+        EndIf
+        
+    Pole 8
+        If (T>T15)                                              ;Ventar i 15 sekund, stenger deretter SV04
+            FILT_SV04_I             = 0
+            FILT_Filter_Sekv        = 9
+            T                       = 0
+        EndIf
+            
+                                    
+    Pole 9                          
+        If (T>T15)                                              ;Ventar i 15 sekund, opnar deretter SV03
+            FILT_SV03_I             = 1
+            FILT_Filter_Sekv        = 10
+            T                       = 0
+        EndIf                       
+    
+    Pole 10
+        If (T>T15)                                              ;Ventar i 15 sekund, opnar deretter SV01
+            FILT_SV01_I             = 1
+            FILT_Filter_Sekv        = 11
+            T                       = 0
+        EndIf    
+    
+    Pole 11
+        If(T>T15)                                               ;Ventar i 15 sekund, stenger SV01
+                FILT_SV01_I         = 0
+                FILT_Filter_Sekv    = 12
+                T                   = 0
+        EndIf
+    
+    Pole 12
+        If (T>15)                                               ;Ventar i 15 sekund, stenger SV03. Dei 4 siste her er det som blir kalla modning. Sender skitvatnet til inntaksbassenget. 
+                FILT_SV03_I         = 0
+                FILT_Filter_Sekv    = 0
+                T                   = 0
+        EndIf
+EndSwitch    
+    
+    
+;P02-Styring
+
+Switch DrValg(2)                                                ;Under her kjem styring til alle komponentane som er tilknytt FILT_. Dette vil sei alt i nërheita av filteret og RV01. Prinsippe for styringane under er som beskreve for P01.        
+;Pole 0                                         ;Dersom AV
+  FILT_P02               = 0
+  FILT_P02_Padrag        = 0             
+                
+Pole 1 
+  If(FILT_SV04 = 1)                             ;Dersom Manuell og SV04 er open                                       
+  FILT_P02               = (Man(2)>0.1)
+  FILT_P02_Padrag        = Man(2)                   
+  EndIf             
+Pole 2                                          ;Dersom Auto 
+  FILT_P02               = FILT_P02_Start_I
+  FILT_P02_Padrag        = FILT_P02_Padrag_I             
+EndSwitch           
+
+
+;RV01-Styring
+      
+If FILT_RV01_OK_I And FILT_RV01_Start_I                                  ;Sjekkar om RV01 er ok og om RV01 er valgt. 
+   FILT_RV01_I            = 1
+   FILT_RV01_Padrag_I     = 50
+Else
+   FILT_RV01_I            = 0
+   FILT_RV01_Padrag_I     = 0  
+EndIf 
+
+Switch DrValg(4)                                
+;Pole 0                                         ;Dersom AV
+  FILT_RV01_Padrag        = 0
+                              
+Pole 1                                          ;Dersom Manuell
+  FILT_RV01_Padrag        = Man(4)                   
+                
+Pole 2                                          ;Dersom Auto
+  FILT_RV01_Padrag        = FILT_RV01_Padrag_I  ;KASKADEKASKADE ;Her skal vi inn med kaskaderegulering             
+EndSwitch 
+
+
+;SV01-Styring
+
+Switch DrValg(5)
+;Pole 0
+    FILT_SV01            = 0                    ;Dersom AV
+                                                
+Pole 1                                          
+    FILT_SV01            = 1                    ;Dersom PÜ
+                                                
+Pole 2                                          
+    FILT_SV01            = FILT_SV01_I          ;Dersom Auto
+EndSwitch                                       
+                                                
+                                                
+;SV02-Styring                                   
+                                                
+    Switch DrValg(6)                            
+;Pole 0                                         
+    FILT_SV02_Padrag     = 0                    ;Dersom AV
+                                                
+Pole 1                                          
+    FILT_SV02_Padrag     = 1                    ;Dersom PÜ
+                                                
+Pole 2                                          
+    FILT_SV02_Padrag     = FILT_SV02_Padrag_I   ;Dersom Auto
+EndSwitch                                       
+
+
+;SV03-Styring
+
+Switch DrValg(7)
+;Pole 0
+    FILT_SV03            = 0                         ;Dersom AV
+
+Pole 1
+    FILT_SV03            = 1                         ;Dersom PÜ
+
+Pole 2
+    FILT_SV03            = FILT_SV03_I               ;Dersom Auto
+EndSwitch   
+
+
+;SV04-Styring
+
+Switch DrValg(8)
+;Pole 0
+    FILT_SV04            = 0                         ;Dersom AV
+
+Pole 1
+    FILT_SV04            = 1                         ;Dersom PÜ
+
+Pole 2
+    FILT_SV04            = FILT_SV04_I               ;Dersom Auto
+EndSwitch
+        
+ 
+;;-----------------------------------------
+;;-------- P03 - Utlõp reinvatn -----------                 ;Styringa av siste delen av modellen. TrykkmÜling og det som er knytt til P03. Prinsippe er akkurat likt som dei andre styringane. Berre sjÜ kva variablane betyr. 
+;;-----------------------------------------  
+OK(3) = Sym_OK(3) And (LT03>P03_LT03_L)
+OK(9) = Sym_OK(9)
+
+
+;P03-Styring
+
+If (PT01>P03_PT01_H) Or (LT04>P03_LT04_H)
+   P03_Start_I = 0
+EndIf
+If (PT01<P03_PT01_Setpunkt) And (LT04<P03_LT04_Setpunkt)
+   P03_Start_I = 1
+EndIf  
+
+PID_In(2)    = (PT01 * 100)
+PID_Set(2)   = (P03_PT01_Setpunkt * 100)
+
+If OK(3) And P03_Start_I      
+    PID_Drv(2)            = 2   
+    P03_Padrag_I          = PID_Out(2)
+Else
+    PID_Drv(2)            = 1   
+    P03_Padrag_I          = 0
+EndIf
+
+
+    
+Switch DrValg(3)                                
+;Pole 0                                     ;Dersom AV
+  P03_P03                   = 0
+  P03_P03_Padrag            = 0
+  PID_Man(2)                = 0              
+                                            
+Pole 1
+    If(PT01<0.28)                           ;Dersom Manuell og trykkmÜlar mindre enn hõgverdi.
+        P03_P03                   = (Man(3)>0.1)     
+        P03_P03_Padrag            = Man(3)            
+        PID_Man(2)                = Man(3)
+    Else
+        P03_P03                   = 0     
+        P03_P03_Padrag            = 0           
+        PID_Man(2)                = Man(3)
+    EndIf
+    
+Pole 2                                      ;Dersom Auto, OK(1) og INN_Start
+  P03_P03                   = P03_Start_I
+  P03_P03_Padrag            = P03_Padrag_I             
+EndSwitch 
+
+   
+;SV05-Styring
+
+If (LT04>P03_LT04_SVH)                        
+    P03_SV05_Start_I = 1
+EndIf
+If (LT04<P03_LT04_L)
+    P03_SV05_Start_I = 0
+EndIf
+
+If OK(9) And P03_SV05_Start_I
+    P03_SV05_I = 1
+Else
+    P03_SV05_I = 0
+EndIf
+ 
+Switch DrValg(9)                                
+;Pole 0                                     ;Dersom AV
+    P03_SV05                = 0            
+                        
+Pole 1                                      ;Dersom PÜ
+    P03_SV05                = 1
+                        
+Pole 2                                      ;Dersom Auto, OK(9)
+    P03_SV05                = P03_SV05_I             
+EndSwitch                
+ 
+}
+
+;;-----------------------------------------
+;;---------Overordnet prosess---------------
+;;-----------------------------------------    
+;If trykknappibildettil Or tid for spyl
+;   trykknappibildettil = 0
+;   Tid= 0 
+;   Spyle_Filter = 1
+;   
+;EndIf
+;
+;
+;If Bypass_Filter 
+;   RV01_I = 1
+;   Filter = 0
+;Else
+;   RV01_I = 0
+;EndIf    
+;
+;
+;OKF1 = lt01>gr     ;NivÜ i HB1 er ok
+;OKF2 = adfkjsdfkjas
+;
+;OK_Filter = OKF1 And OKF2 And ....alt som skal til for at det skal starte......
+;
+;;If /OK_Filter and Filter>0 and filter<3
+;;   Filter = 0  ;Brutal nedstenging
+;;EndIf    
+;;
+;IncI T  ;(T=T+1)
+;Switch Filter
+;    ;av
+;    SV01_I = 0
+;    UV01_I = 0
+;    SV03_I = 0    
+;    ;Starte ? OK_Filter (dvs alt i auto) and (Bypass_Filter = 0)  and ok(5) and ok(9) and .... LT01>LT01_L + 3 cm? and LT03<LT03_H-5 cm
+;    ;Filter = 1
+;    T = 0
+;Pole 1
+;    ;Starte UV!
+;    
+;    Filter = 2
+;    T=0   
+;Pole 2
+;    ;UV startet ? + and T>T1 Tidsforsinkelse ?
+;       T=0
+;       Filter = 3
+;
+;Pole 3
+;    SV01_I = 1     ;Filter i produksjon
+;    
+;    If Spyle_Filter ;or nytime;?
+;        Filter = 10
+;    EndIf
+;    
+;    If Stopp_Filter Or /OK_Filter     LT01<   LT03>
+;        Filter = 4 
+;        T=0
+;    EndIf
+;    
+;Pole 4
+;           
+;    ;Stopp SV01 
+;    ;tidsforsink 10 s    T>T2
+;    Filter = 5
+;    
+;Pole 5
+;    ;Stopp UV
+;    
+;    SV02+UV+SV01
+;
+;Pole 6
+;    Tidsforisnk
+;    Filter = 0
+; 
+;Pole 7
+;Pole 8
+;Pole 9
+;Pole 10
+;    SV01_I = 0
+;    SV02_I = 0 
+;    ;Stoppe UV?
+;    ;Vente ti sek for at ventiler skal vëre lukkket ?
+;       Filter = 11
+;Pole 11
+;    ;Tõmmr filter
+;    SV03_I = 1
+;    30 s?
+;Pole 12
+;    SV03_I = 0
+;    
+;    13
+;    
+;    SV04_:I 1
+;    Starte pumpe etter 5 s?
+;     
+
+
+;OK_Filter = (LT02>LT02_L) And (LT03<LT03_H) 
+;
+;Switch Filter_I
+;    ;Pole 0
+;    
+;    Pole 1                                                      ;Sjekkar om filteret er OK
+;        If OK_Filter                         
+;            Filter_I    = 2
+;        Else
+;            Filter_I    = 50
+;        EndIf
+;        T = 0
+;    
+;    Pole 2
+;        SV02_Padrag_I   = 100                                   ;Opnar SV02 og skrur pÜ UV_01 og ventar 5 sekund
+;        If (T>T1)
+;            Filter_I    = 3
+;            T           = 0
+;        EndIf              
+;    
+;    Pole 3                                                      ;Opnar SV01 og ventar pÜ filtrering til LT03
+;        SV01_I = 1                                  
+;        If(LT03>(LT03_H-5))
+;            Filter_I    = 4
+;            T           = 0
+;        EndIf
+;    
+;    Pole 4                                                      ;Stenger SV01 og ventar 5 sekund
+;        SV01_I = 0
+;        If(T>T1)
+;            Filter_I    = 5
+;            T           = 0
+;        EndIf
+;    
+;    Pole 5                                                      ;Stenger SV02 og skrur av UV-filteret.
+;        SV02_Padrag_I   = 0
+;        Filter_I        = 1
+;
+;    Pole 50                                                     ;Dersom Filterslõyfa ikkje er OK vert alt i denne slõyfa slÜtt av. 
+;        If /OK_Filter
+;            SV01_I          = 0
+;            SV02_Padrag_I   = 0
+;            SV03_I          = 0
+;            SV04_I          = 0
+;            RV01_Padrag_I   = 0
+;            P02_Padrag_I    = 0
+;        Else
+;        Filter_I = 1
+;        EndIf   
+;        
+;EndSwitch
+;              
+;;;-----------------------------------------
+;;;-------- RV01 - Reguleringsslõyfe -------
+;;;-----------------------------------------    
+;OK_Regulering = (LT02>LT02_L) And (LT03<LT03_H) ;And (Filter_I = 0) And (PID_I = 0) And /(Regulering_I = 0) And (Trykk_I = 0) And (Spyl = 0)
+;
+;Switch Regulering_I
+;    ;Pole 0
+;    
+;    
+;    Pole 1
+;        If OK_Regulering                         
+;            Regulering_I = 2
+;        Else
+;            Regulering_I = 50
+;        EndIf
+;    
+;    Pole 2
+;        If OK_Regulering
+;            Switch DrValg(4)                                
+;                ;Pole 0                                         ;Dersom OK_PID og AV
+;                    RV01_I         = 0
+;                    RV01_Padrag_I  = 0
+;                                  
+;                Pole 1                                          ;Dersom OK_PID og Manuell
+;                    RV01_I         = 1
+;                    RV01_Padrag_I  = Man(4)                   
+;                                  
+;                Pole 2                                          ;Dersom OK_PID og Auto
+;                    ;KASKADE KASKADE KASKADE              
+;                EndSwitch
+;        Else
+;            Regulering_I = 1
+;        EndIf
+;        
+;    
+;    Pole 3    
+;
+;    Pole 50                                                     ;Dersom ting ikkje er OK og ein ynskjer Ü slÜ av alt i trykkslõyfa
+;        If /OK_Regulering
+;            RV01_I = 0
+;            SV01_I = 0
+;             
+;        Else
+;            Regulering_I = 1
+;        EndIf
+;        
+;EndSwitch
+;;;-----------------------------------------
+;;;------------ TRYK - Trykkslõyfe ---------
+;;;-----------------------------------------
+;OK_Trykk = (LT03>LT03_L) And (LT04<LT04_H) ;And (Filter_I = 0) And (PID_I = 0) And (Regulering_I = 0) And /(Trykk_I = 0) And (Spyl = 0)
+;
+;Switch Trykk_I
+;    ;Pole 0                                                 
+;              
+;    Pole 1                                                      ;Sjekkar om det er PID-slõyfa som er valgt og at den er klar. 
+;        If OK_Trykk                           
+;            Trykk_I     = 2
+;        Else
+;            Trykk_I     = 50
+;        EndIf
+;        T = 0
+;
+;    Pole 2                                                      ;Opnar ventil og ventar 5 sekund. 
+;        SV05_I          = 1
+;        If(T>T1)
+;            Trykk_I     = 3
+;            T=0
+;        EndIf
+;        
+;        
+;    Pole 3
+;        If OK_PID
+;            Switch DrValg(4)                                
+;                ;Pole 0                                         ;Dersom OK_PID og AV
+;                    P03_I           = 0
+;                    P03_Padrag_I    = 0
+;                                    
+;                Pole 1                                          ;Dersom OK_PID og Manuell
+;                    P03_I           = 1
+;                    P03_Padrag_I    = Man(1)                   
+;                                    
+;                Pole 2                                          ;Dersom OK_PID og Auto
+;                    PID_In(2)       = PT01          
+;                    PID_Set(2)      = PT01_Setpunkt
+;                    P03_I           = 1
+;                    P03_Padrag_I    = PID_Out(2)              
+;                EndSwitch
+;        Else
+;           Trykk_I        = 1
+;        EndIf
+;        
+;     Pole 50                                                    ;Dersom ting ikkje er OK og ein ynskjer Ü slÜ av alt i trykkslõyfa
+;        If /OK_Trykk
+;            P03_I         = 0
+;            P03_Padrag_I  = 0
+;            SV05_I        = 0             
+;        Else
+;            Trykk_I       = 1
+;        EndIf
+;                   
+;EndSwitch
+;
+;;;-----------------------------------------
+;;;------------ Spyleslõyfe ----------------
+;;;-----------------------------------------       
+;OK_Spyl = (LT01>LT03_L) And ;And (Filter_I = 0) And (PID_I = 0) And (Regulering_I = 0) And (Trykk_I = 0) And /(Spyl = 0)
+;
+;Switch Spyl_I
+;    ;Pole 0                                                 
+;              
+;    Pole 1                                                      ;Sjekkar om det er Spyleslõyfa som er valgt og at den er klar. 
+;        If OK_Spyl                          
+;            Spyl_I     = 2
+;        Else
+;            Spyl_I     = 50
+;        EndIf
+;        T = 0
+;
+;    Pole 2                                                      ;Lukkar utgangsventilar/opnar spyleventil og ventar 5 sekund. 
+;
+;        
+;        
+;    Pole 3
+;
+;     Pole 50                                                    ;Dersom ting ikkje er OK og pumpa ikkje skal starte. 
+;        If /OK_Spyl
+;            P02_Padrag_I = 0           
+;        Else
+;            Spyl_I       = 1
+;        EndIf
+;                   
+;EndSwitch            
+;            
+;        
+;      
+;;;-----------------------------------------
+;;;----------- Variabeltilordning ----------
+;;;----------------------------------------- 
+;   
+;P01              = P01_I                                        ;Setter utgangsverdi til dei interne variablane frÜ switchane
+;P01_Padrag       = P01_Padrag_I
+;P02              = P02_I                
+;P02_Padrag       = P02_Padrag_I
+;P03              = P03_I                
+;P03_Padrag       = P03_Padrag_I
+;RV01_Padrag      = RV01_Padrag_I
+;SV01_I           = SV01
+;SV02_Padrag_I    = SV02_Padrag
+;SV03_I           = SV03
+;SV04_I           = SV04
+;SV05_I           = SV05 
+;
+
+;;-----------------------------------------
+;;---------Overordnet prosess---------------
+;;-----------------------------------------    
+;If trykknappibildettil Or tid for spyl
+;   trykknappibildettil = 0
+;   Tid= 0 
+;   Spyle_Filter = 1
+;   
+;EndIf
+;
+;
+;If Bypass_Filter 
+;   RV01_I = 1
+;   Filter = 0
+;Else
+;   RV01_I = 0
+;EndIf    
+;
+;
+;OKF1 = lt01>gr     ;NivÜ i HB1 er ok
+;OKF2 = adfkjsdfkjas
+;
+;OK_Filter = OKF1 And OKF2 And ....alt som skal til for at det skal starte......
+;
+;;If /OK_Filter and Filter>0 and filter<3
+;;   Filter = 0  ;Brutal nedstenging
+;;EndIf    
+;;
+;IncI T  ;(T=T+1)
+;Switch Filter
+;    ;av
+;    SV01_I = 0
+;    UV01_I = 0
+;    SV03_I = 0    
+;    ;Starte ? OK_Filter (dvs alt i auto) and (Bypass_Filter = 0)  and ok(5) and ok(9) and .... LT01>LT01_L + 3 cm? and LT03<LT03_H-5 cm
+;    ;Filter = 1
+;    T = 0
+;Pole 1
+;    ;Starte UV!
+;    
+;    Filter = 2
+;    T=0   
+;Pole 2
+;    ;UV startet ? + and T>T1 Tidsforsinkelse ?
+;       T=0
+;       Filter = 3
+;
+;Pole 3
+;    SV01_I = 1     ;Filter i produksjon
+;    
+;    If Spyle_Filter ;or nytime;?
+;        Filter = 10
+;    EndIf
+;    
+;    If Stopp_Filter Or /OK_Filter     LT01<   LT03>
+;        Filter = 4 
+;        T=0
+;    EndIf
+;    
+;Pole 4
+;           
+;    ;Stopp SV01 
+;    ;tidsforsink 10 s    T>T2
+;    Filter = 5
+;    
+;Pole 5
+;    ;Stopp UV
+;    
+;    SV02+UV+SV01
+;
+;Pole 6
+;    Tidsforisnk
+;    Filter = 0
+; 
+;Pole 7
+;Pole 8
+;Pole 9
+;Pole 10
+;    SV01_I = 0
+;    SV02_I = 0 
+;    ;Stoppe UV?
+;    ;Vente ti sek for at ventiler skal vëre lukkket ?
+;       Filter = 11
+;Pole 11
+;    ;Tõmmr filter
+;    SV03_I = 1
+;    30 s?
+;Pole 12
+;    SV03_I = 0
+;    
+;    13
+;    
+;    SV04_:I 1
+;    Starte pumpe etter 5 s?
+;     
+   
+    
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+;;;---------------------------------------------------
+;;;----------------Program Start ---------------------
+;;;---------------------------------------------------   
+;;Ok(1)     = 1;Sym_OK(1)  And /Nettvakt and /LS01 and etc...           
+;;;Ok(2)     = Sym_OK(2)  And /Nettvakt            
+;;;Ok(3)     = Sym_OK(3)  And /Nettvakt            
+;;
+;;;---------------------------------------------------
+;;;---------------- Pumpestyring ---------------------
+;;;---------------------------------------------------
+;;;---------------------------------------------------              
+;;;---- 01 - P01 - Pumpe 1 ---------------------------                                      
+;;;---------------------------------------------------              
+;P01_Stopp = (LT01<LT01_L) Or (LT02>LT02_H)
+;
+;PID_In(1)    = LT02           
+;PID_Set(1)   = LT02_Setpunkt      
+; 
+;
+;If (/P01_Stopp)                    
+;   PID_Drv(1)   = 2         
+;   P01_Padrag_I = PID_Out(1)
+;Else                        
+;   PID_Drv(1)   = 1            
+;   P01_Padrag_I = 0            
+;EndIf         
+;
+;Switch DrValg(1)            
+;;Pole 0
+;   P01 = 0  
+;   P01_padrag = 0  
+;Pole 1
+;   P01 = 1 
+;   P01_padrag = Man(1) 
+;Pole 2
+;   P01 = 1     
+;   P01_padrag = P01_Padrag_I
+;EndSwitch  
+;      
+;;;---------------------------------------------------              
+;;;---- 02 - P02 - Spylepumpe ------------------------                                      
+;;;---------------------------------------------------              
+;P02_Stopp = (LT01<LT01_L) Or (/SV04)     
+;
+;If (/P02_Stopp)              
+;    Switch DrValg(2)            
+;    ;Pole 0  
+;        P02_padrag = 0  
+;    Pole 1 
+;        P02_padrag= Man(2) 
+;    Pole 2     
+;        P02_padrag = 10 ;??????????????????????????????????????????????
+;    EndSwitch
+;EndIf  
+;    
+;;;---------------------------------------------------              
+;;;---- 03 - P03 - Forbrukerpumpe --------------------                                      
+;;;---------------------------------------------------              
+;P03_Stopp = (LT03<LT03_L) Or (LT04>LT04_H) ; OR NOKO MED TRYKKET TIL PT01
+;
+;
+;
+;PID_In(3)    = PT01           
+;PID_Set(3)   = PT01_Setpunkt      
+; 
+;
+;If (/P03_Stopp)                    
+;   PID_Drv(3)   = 2         
+;   P03_Padrag_I = PID_Out(3)
+;Else                        
+;   PID_Drv(3)   = 1            
+;   P03_Padrag_I = 0            
+;EndIf         
+;
+;Switch DrValg(3)            
+;;Pole 0  
+;   P03_padrag = 0  
+;Pole 1 
+;   P03_padrag = Man(3) 
+;Pole 2     
+;   P03_padrag = P03_padrag_I
+;EndSwitch  
+;
+;
+;;;---------------------------------------------------
+;;;---------------- Ventilstyring --------------------
+;;;---------------------------------------------------
+;;;---------------------------------------------------              
+;;;---- 04 - RV01 - Reguleringsventil ----------------                                      
+;;;---------------------------------------------------
+;RV01_Stopp = (LT02<LT02_L) Or (LT03>LT03_H) Or (SV01) 
+;      
+;If (/RV01_Stopp)
+;    Switch DrValg(4)            
+;    ;Pole 0  
+;       RV01_padrag = 0  
+;    Pole 1 
+;       RV01_padrag = Man(4) 
+;    Pole 2     
+;       RV01_padrag = 10 ;RV01_Padrag_I?
+;    EndSwitch  
+;EndIf
+;
+;;;---------------------------------------------------              
+;;;---- 05 - SV01 - Ventil til filter ----------------
+;;;---------------------------------------------------
+;;SV01_stopp = (LT02<LT02_L) Or (LT03>LT03_H) Or (/RV01_I)
+;;
+;;OK(5) =  Sym_OK(5) And  /SV01_Stopp ;(LT02>LT02_L) And (LT03<LT03_H)
+;;
+;;;If  RV01_I Or (RV01_Padrag>0)       ;Betingelse 
+;;;    SV01_I = 0
+;;;Else
+;;;    SV01_I = 1
+;;;EndIf
+;;
+;;
+;;
+;;If /SV01_stopp
+;;    Switch DrValg(5)            
+;;    ;Pole 0  
+;;       SV01 = 0         ;Lukk
+;;    Pole 1 
+;;       SV01 = 1         ;èpne
+;;    Pole 2     
+;;       SV01 = SV01_I    ;Auto
+;;    EndSwitch
+;;EndIf
+;;
+;;
+;;Switch DrValg(5)            
+;;;Pole 0  
+;;   SV01 = 0         ;Lukk
+;;Pole 1 
+;;   SV01 = /SV01_stopp         ;èpne
+;;Pole 2     
+;;   SV01 = SV01_I  And OK(5)   ;Auto
+;;EndSwitch
+;
+;;
+;;;---------------------------------------------------              
+;;;---- 06 - SV02 - Ventil til reint vatn ------------
+;;;---------------------------------------------------
+;SV02_stopp = (LT03>LT03_H)
+;
+;If (/SV02_stopp)
+;    Switch DrValg(6)            
+;    ;Pole 0  
+;       SV02_Padrag = 0  
+;    Pole 1 
+;       SV02_Padrag = 1
+;       UV01_I = 1 
+;    Pole 2     
+;       SV02_Padrag = 1  ;??????????????????????????
+;       UV01_I = 1
+;    EndSwitch                   
+;EndIf                   
+;;;---------------------------------------------------              
+;;;---- 07 - SV03 - Ventil frÜ filter ----------------
+;;;---------------------------------------------------
+;SV03_stopp = (LT01>LT01_H)
+;
+;If (/SV03_stopp)
+;    Switch DrValg(7)            
+;    ;Pole 0  
+;       SV03 = 0  
+;    Pole 1 
+;       SV03 = 1 
+;    Pole 2     
+;       SV03 = 1  ;??????????????????????????
+;    EndSwitch
+;EndIf
+;;;---------------------------------------------------              
+;;;---- 08 - SV04 - Ventil spyling -------------------
+;;;--------------------------------------------------- 
+;SV04_stopp = (LT01>LT01_H)
+;
+;If (/SV04_stopp)
+;    Switch DrValg(8)            
+;    ;Pole 0  
+;       SV04 = 0  
+;    Pole 1 
+;       SV04 = 1 
+;    Pole 2     
+;       SV04 = 1  ;??????????????????????????
+;    EndSwitch
+;EndIf
+;    
+;
+ 
+
+      
+;;;---------------------------------------------------              
+;;;---- 02 - P02 - Pumpe 2 ---------------------------
+;;;---------------------------------------------------              
+;;if OK(1) and OK(2)   ;Begge mÜ vëre ok for at denne skal starte
+;;   P02_Padrag_I = (LT01-LT01_L)/(LT01_H-LT01_L)*50
+;;   If P02_Padrag_I>50
+;;      P02_Padrag_I=50        
+;;   EndIf
+;;   If P02_Padrag_I<20
+;;      P02_Padrag_I=20        
+;;   EndIf
+;;else
+;;   P02_Padrag_I = 0
+;;Endif
+;;
+;;Switch DrValg(2)  
+;;   P02_padrag = 0
+;;Pole 1         
+;;   If Sym_Auto(1) ;and /Sym_Feil(1) and /Nettvakt
+;;      P02_padrag = Man(2)
+;;   Else
+;;      P02_padrag = 0
+;;   EndIf
+;;Pole 2      
+;;   If OK(2)                             ;Her styres alt av pÜdrag, og utgang slÜr seg pÜ ved behov.
+;;      P02_padrag = P02_padrag_I
+;;   Else
+;;      P02_padrag = 0
+;;   EndIf
+;;EndSwitch
+;;P02 = (P02_padrag>0)     
+;;
+;;;---------------------------------------------------              
+;;;---- 03 - MV01 - Ventil 1                                       
+;;;---------------------------------------------------              
+;;;Switch DrValg(3)  
+;;;   MV01 = 0
+;;;Pole 1      
+;;;   MV01 = Sym_Auto(3) and /Sym_Feil(3) ;and /Nettvakt
+;;;Pole 2      
+;;;   MV01 = MV01_I And OK(3)
+;;;EndSwitch
+;;
+;
+
+;
+;pID_SET(1) = 2.4 ;lt01_sETPUNKT
+;pid_in(1) = lt01
+;p01_pADRAG_i = pid_out(1)          
+;
+;
+;
+
+
+
+;;---------------------------------------------------------------------------------
+;;-----------Pumpestyring en pumpe-------------------------------------------------    FORENKLA PID-PROGRAM OBJEKT
+;;---------------------------------------------------------------------------------
+;If Start        
+;   PID_Drv(1)   = 2   
+;   P01_Padrag_I = PID_Out(1)
+;Else
+;   PID_Drv(1)   = 1   
+;   P01_Padrag_I = 0
+;EndIf
+;   
+;
+;PID_In(1)    = LT02
+;Pid_Set(1)   = LT02_Setpunkt  
+;PID_Min(1)   = 10
+;PID_Max(1)   = 90
+;PID_Man(1)   = 25
+;
+;;---------------------------------------------------------------------------------
+;;-----------Driftsvalg------------------------------------------------------------
+;;---------------------------------------------------------------------------------
+;
+;Switch DrValg(1)
+;   P01  = 0
+;   P01_Padrag = 0
+;   PID_Man(1) = 0
+;Pole 1                                           
+;   P01 = 1
+;   P01_Padrag  = Man(1)
+;   PID_Man(1) = Man(1)
+;Pole 2
+;   P01  = (P01_Padrag_I>0.1)
+;   P01_Padrag = P01_Padrag_I
+;EndSwitch
+;
+
+
+;;---------------------------------------------------------------------------------
+;;-----------Pumpestyring en pumpe------------------------------------------------- HEILE PIDPROGRAM FRè OBJEKT
+;;---------------------------------------------------------------------------------
+;
+;
+;VP11_P01_0K = (Modus(1)=0) And (Symbol(1)<>3)
+;
+;;---------------------------------------------------------------------------------
+;;-----------Styrer utg reg -------------------------------------------------------
+;;---------------------------------------------------------------------------------
+;If VP11_P01_0K And Start        
+;      PID_Drv(1) = 2   
+;      VP11_SCO1_I = PID_Out(1)
+;Else
+;   PID_Drv(1) = 1   
+;   VP11_SCO1_I      = 0
+;EndIf
+;   
+;
+;PID_In(1)    = FT01
+;Pid_Set(1)   = FT01_Setp  
+;PID_Min(1)   = 10
+;PID_Max(1)   = 90
+;PID_Man(1)   = 25
+;
+;;---------------------------------------------------------------------------------
+;;-----------Driftsvalg------------------------------------------------------------
+;;---------------------------------------------------------------------------------
+;
+;Switch DrValg(1)
+;   P01  = 0
+;   P01_Padrag = 0
+;Pole 1                                           
+;   P01 = (modus(1)=2) And (symbol(1)<>3)
+;   If P01
+;      P01_Padrag  = Man(1)
+;   Else
+;      P01_Padrag = 0
+;   EndIf
+;Pole 2
+;   P01  = VP11_P01_0K And CmpR(VP11_SCO1_I>0.1)
+;   P01_Padrag = VP11_SCO1_I
+;EndSwitch            
+
+
+
+;  ; *** Function Object: Kaskade1 ***
+;
+;
+;If (LT03=NaN!) Or AI_Sal(1)
+;   Kaskade1_Kaskade = 0.5
+;Else
+;   If 0
+;      Kaskade1_Kaskade = (LT03_H-LT03)/(LT03_H-LT03_L)     ;1    Stigande nivÜ = minkande vannmengde
+;   Else
+;      Kaskade1_Kaskade = (LT03-LT03_L)/(LT03_H-LT03_L)     ;0    Stigande nivÜ = Stigande vannmengde
+;   EndIf 
+
+;   If Kaskade1_Kaskade>1
+;           Kaskade1_Kaskade=1
+;   EndIf
+
+;   If Kaskade1_Kaskade<0
+;           Kaskade1_Kaskade=0
+;   EndIf
+;EndIf 
+
+;FT02_Setp = Kaskade1_Kaskade*(FT02_QMax-FT02_QMin) + FT02_QMin   
+                                             
+
+;Switch PID_I
+;    ;Pole 0                                                     ;Dersom ein ynskjer Ü slÜ av alt i PID-slõyfa
+;     ;PID_I = 1
+;      If P01_Start
+;        EndIf        
+;    Pole 1                                                      ;Sjekkar om det er PID-slõyfa som er valgt og at den er klar. 
+;        If OK_PID                           
+;            PID_I   = 2
+;        Else
+;            PID_I   = 50
+;        EndIf
+;
+;    Pole 2
+;        If OK_PID
+;            Switch DrValg(1)                                
+;                ;Pole 0                                         ;Dersom OK_PID og AV
+;                    P01_I         = 0
+;                    P01_Padrag_I  = 0
+;                                  
+;                Pole 1                                          ;Dersom OK_PID og Manuell
+;                    P01_I         = 1
+;                    P01_Padrag_I  = Man(1)                   
+;                                  
+;                Pole 2                                          ;Dersom OK_PID og Auto
+;                    PID_In(1)     = LT02          
+;                    PID_Set(1)    = LT02_Setpunkt
+;                    P01            = IN_Start
+;                    IN_P01_Padrag  = IN_P01_Padrag_I             
+;                EndSwitch
+;        Else
+;           PID_I          = 1
+;        EndIf
+;        
+;     Pole 50                                                    ;Dersom PIDslõyfa ikkje er OK vert alt i denne slõyfa slÜtt av. 
+;        If /OK_PID
+;            P01_I         = 0
+;            P01_Padrag_I  = 0             
+;        Else
+;            PID_I         = 1
+;        EndIf
+;                   
+;EndSwitch
+;            
+;;    Pole 3
+;;        If OK_PID And (DrValg(1) = 0)       ;Dersom OK_PID og driftsval AV
+;;            P01_I = 0
+;;            P01_Padrag_I = 0
+;;        Else
+;;            PID_I = 1
+;;        EndIf          
+;;            
+;;    Pole 4  
+;;        If  OK_PID And (DrValg(1) = 1)      ;Dersom OK_Pid og Driftsvalg manuell
+;;            P01_I = 1
+;;            P01_Padrag_I = Man(1)
+;;        Else
+;;            PID_I = 1
+;;        EndIf
+;;      
+;;    Pole 5
+;;        If  OK_PID And (DrValg(1) = 2)      ;Dersom OK_Pid og Driftsvalg auto
+;;            PID_In(1)    = LT02          
+;;            PID_Set(1)   = LT02_Setpunkt
+;;            P01_I = 1
+;;            P01_Padrag_I = PID_Out(1)
+;;        Else
+;;            PID_I = 1
+;;        EndIf
+;;    
+;
+;
+
+
+
+
+
+
+
+
